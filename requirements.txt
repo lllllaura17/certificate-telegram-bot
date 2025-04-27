@@ -1,0 +1,6 @@
+Flask
+python-telegram-bot
+PyPDF2
+docxtpl
+requests
+gunicorn
