@@ -57,7 +57,10 @@ def generate_certificate_number():
         with open(counter_file, 'w') as f:
             f.write('0')
     with open(counter_file, 'r+') as f:
-        num = int(f.read().strip()) + 1
+        content = f.read().strip()
+        # если файл пустой — считаем, что в нём 0
+        prev = int(content) if content.isdigit() else 0
+        num = prev + 1      
         f.seek(0)
         f.write(str(num))
         f.truncate()
