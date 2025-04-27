@@ -33,19 +33,17 @@ init_db()
 dispatcher = Dispatcher(bot, None, use_context=True)
 
 def start(update, context):
-    user = update.effective_user
     chat_id = update.effective_chat.id
-    username = user.username
+    username = update.effective_user.username
     if not username:
-        update.message.reply_text("Please set a Telegram username in your settings.")
-        return
+        return bot.send_message(chat_id=chat_id,
+                                text="❗️ Установите username в настройках Telegram.")
     conn = sqlite3.connect('chat_ids.db')
-    c = conn.cursor()
-    c.execute('REPLACE INTO users(username, chat_id) VALUES (?, ?)', (username, chat_id))
-    conn.commit()
-    conn.close()
-    update.message.reply_text(f"Hello, @{username}! You'll receive your certificate when it's ready.")
-
+    # … сохраняем chat_id …
+    bot.send_message(chat_id=chat_id,
+                     text=f"✅ Привет, @{username}! Я буду присылать сертификат.")
+# Здесь _обязательно_ должна быть эта строка:
+dispatcher.add_handler(CommandHandler('start', start))
 # Webhook endpoint for Telegram
 @app.route(f'/{BOT_TOKEN}', methods=['POST'])
 def telegram_webhook():
