@@ -45,7 +45,7 @@ def start(update, context):
     )
     conn.commit(); conn.close()
     # 3) генерируем ссылку на форму, включая token
-    form_url = f"https://forms.yandex.ru/u/ВАШ_ID_ФОРМЫ/?token={token}"
+    form_url = f"https://forms.yandex.ru/u/67fa6d6ce010db11f3c93316/?token={token}"
     update.message.reply_text(
         f"✅ Привет! Чтобы получить сертификат, пожалуйста, заполните форму по ссылке:\n\n{form_url}")
 # Здесь _обязательно_ должна быть эта строка:
