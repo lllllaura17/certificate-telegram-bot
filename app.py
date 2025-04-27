@@ -79,11 +79,16 @@ def get_chat_id(username):
 @app.route('/form_webhook', methods=['POST'])
 def form_webhook():
     # 1) Логируем входящий запрос
-    print("FORM_WEBHOOK called with data:", request.json)
+    print("FORM_WEBHOOK payload:", request.json)
 
     data = request.json.get('data', {})
     fio = data.get('fio', '').strip()
     username = data.get('username', '').strip()
+# если человек указал "@ivanov", убираем первую @
+    if username.startswith('@'):
+        username = username[1:]
+    print("Normalized username:", username)
+
 
     # 2) Загрузка списка участников и проверка ФИО
     with open('program.pdf', 'rb') as f:
@@ -110,12 +115,9 @@ def form_webhook():
     # Send to user
     chat_id = get_chat_id(username)
     print("Resolved chat_id for", username, "→", chat_id)
-    if chat_id:
-        with open(out_docx, 'rb') as doc:
-            bot.send_document(chat_id=chat_id, document=doc)
-    else:
-        print(f"❌ No chat_id for @{username}, aborting.")
-    return {"status": "error", "message": "User did not initiate bot"}, 400
+    if not chat_id:
+        print(f"❌ No chat_id for {username}, aborting.")
+        return {"status": "error", "message": "User did not initiate bot"}, 400
 
     # Отправка
     try:
