@@ -109,13 +109,23 @@ def form_webhook():
 
     # Send to user
     chat_id = get_chat_id(username)
+    print("Resolved chat_id for", username, "→", chat_id)
     if chat_id:
         with open(out_docx, 'rb') as doc:
             bot.send_document(chat_id=chat_id, document=doc)
     else:
-        print(f"User @{username} did not initiate the bot with /start.")
+        print(f"❌ No chat_id for @{username}, aborting.")
+    return {"status": "error", "message": "User did not initiate bot"}, 400
+
+    # Отправка
+    try:
+        with open(out_docx, 'rb') as doc:
+            bot.send_document(chat_id=chat_id, document=doc)
+        print("✅ Certificate sent to", chat_id)
+    except Exception as e:
+        print("❌ Failed to send certificate:", e)
 
     return {"status": "ok"}
-
+    
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=PORT)
