@@ -78,6 +78,7 @@ def get_chat_id(username):
 # Webhook endpoint for form submissions
 @app.route('/form_webhook', methods=['POST'])
 def form_webhook():
+    print("FORM_WEBHOOK called with data:", request.json)
     data = request.json.get('data', {})
     fio = data.get('fio', '').strip()
     username = data.get('username', '').strip()
