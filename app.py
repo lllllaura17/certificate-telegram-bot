@@ -3,7 +3,7 @@ import tempfile
 import sqlite3
 from flask import Flask, request
 from telegram import Bot, Update
-from telegram.ext import Dispatcher, CommandHandler
+from telegram.ext import Application, CommandHandler
 from PyPDF2 import PdfReader
 from docxtpl import DocxTemplate
 import uuid
@@ -31,7 +31,7 @@ def init_db():
 
 init_db()
 
-dispatcher = Dispatcher(bot, None, use_context=True)
+application = Application.builder().token(BOT_TOKEN).build()
 
 def start(update, context):
     chat_id = update.effective_chat.id
@@ -40,7 +40,7 @@ def start(update, context):
     # 2) сохраняем в БД
     conn = sqlite3.connect('chat_ids.db')
     conn.execute(
-        'REPLACE INTO users(token TEXT PRIMARY KEY, chat_id INTEGER)',
+        'REPLACE INTO users(token, chat_id) VALUES (?, ?)',
         (token, chat_id)
     )
     conn.commit(); conn.close()
@@ -49,7 +49,7 @@ def start(update, context):
     update.message.reply_text(
         f"✅ Привет! Чтобы получить сертификат, пожалуйста, заполните форму по ссылке:\n\n{form_url}")
 # Здесь _обязательно_ должна быть эта строка:
-dispatcher.add_handler(CommandHandler('start', start))
+application.add_handler(CommandHandler('start', start))
 # Webhook endpoint for Telegram
 @app.route('/form_webhook', methods=['POST'])
 def form_webhook():
@@ -85,4 +85,4 @@ def form_webhook():
     return {"status": "ok"}
     
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=PORT)
+    application.run_polling()
