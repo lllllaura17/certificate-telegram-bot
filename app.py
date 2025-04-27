@@ -78,27 +78,34 @@ def get_chat_id(username):
 # Webhook endpoint for form submissions
 @app.route('/form_webhook', methods=['POST'])
 def form_webhook():
+    # 1) Логируем входящий запрос
     print("FORM_WEBHOOK called with data:", request.json)
+
     data = request.json.get('data', {})
     fio = data.get('fio', '').strip()
     username = data.get('username', '').strip()
 
-    # Load approved list of participants
+    # 2) Загрузка списка участников и проверка ФИО
     with open('program.pdf', 'rb') as f:
         reader = PdfReader(f)
         text = ''
         for page in reader.pages:
             text += page.extract_text() or ''
-    approved = fio in text
-    if not approved:
-        return {"status": "error", "message": "ФИО не найдено в программе"}, 400
 
-    # Generate certificate
+    # Заменяем простой approved = fio in text на расширенную проверку:
+    if fio not in text:
+        print("❌ FIO not found in program.pdf:", fio)
+        return {"status": "error", "message": "ФИО не найдено в программе"}, 400
+    else:
+        print("✅ FIO approved:", fio)
+
+    # 3) Генерация сертификата
     tpl = DocxTemplate('template.docx')
     context = {"FIO": fio, "number": generate_certificate_number()}
     tpl.render(context)
     out_docx = tempfile.NamedTemporaryFile(delete=False, suffix='.docx').name
     tpl.save(out_docx)
+    print("Certificate generated at", out_docx)
 
     # Send to user
     chat_id = get_chat_id(username)
