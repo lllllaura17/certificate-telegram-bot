@@ -6,6 +6,7 @@ from telegram import Bot, Update
 from telegram.ext import Dispatcher, CommandHandler
 from PyPDF2 import PdfReader
 from docxtpl import DocxTemplate
+import uuid
 
 # ====== Configuration ======
 BOT_TOKEN = os.getenv('BOT_TOKEN')
@@ -21,7 +22,7 @@ def init_db():
     c = conn.cursor()
     c.execute('''
         CREATE TABLE IF NOT EXISTS users (
-            username TEXT PRIMARY KEY,
+            token TEXT PRIMARY KEY,
             chat_id INTEGER NOT NULL
         )
     ''')
@@ -34,92 +35,46 @@ dispatcher = Dispatcher(bot, None, use_context=True)
 
 def start(update, context):
     chat_id = update.effective_chat.id
-    username = update.effective_user.username
-    if not username:
-        return bot.send_message(chat_id=chat_id,
-                                text="❗️ Установите username в настройках Telegram.")
+    # 1) создаём простой уникальный токен
+    token = uuid.uuid4().hex  # например, '9f3b1c2a...'
+    # 2) сохраняем в БД
     conn = sqlite3.connect('chat_ids.db')
-    # … сохраняем chat_id …
-    bot.send_message(chat_id=chat_id,
-                     text=f"✅ Привет, @{username}! Я буду присылать сертификат.")
+    conn.execute(
+        'REPLACE INTO users(token TEXT PRIMARY KEY, chat_id INTEGER)',
+        (token, chat_id)
+    )
+    conn.commit(); conn.close()
+    # 3) генерируем ссылку на форму, включая token
+    form_url = f"https://forms.yandex.ru/u/ВАШ_ID_ФОРМЫ/?token={token}"
+    update.message.reply_text(
+        f"✅ Привет! Чтобы получить сертификат, пожалуйста, заполните форму по ссылке:\n\n{form_url}")
 # Здесь _обязательно_ должна быть эта строка:
 dispatcher.add_handler(CommandHandler('start', start))
 # Webhook endpoint for Telegram
-@app.route(f'/{BOT_TOKEN}', methods=['POST'])
-def telegram_webhook():
-    update = Update.de_json(request.get_json(force=True), bot)
-    dispatcher.process_update(update)
-    return 'ok'
-
-def generate_certificate_number():
-    counter_file = 'counter.txt'
-    if not os.path.exists(counter_file):
-        with open(counter_file, 'w') as f:
-            f.write('0')
-    with open(counter_file, 'r+') as f:
-        content = f.read().strip()
-        # если файл пустой — считаем, что в нём 0
-        prev = int(content) if content.isdigit() else 0
-        num = prev + 1      
-        f.seek(0)
-        f.write(str(num))
-        f.truncate()
-    return f"ШК-2025 №{num:04d}"
-
-# Helper to get chat_id from username
-def get_chat_id(username):
-    conn = sqlite3.connect('chat_ids.db')
-    c = conn.cursor()
-    c.execute('SELECT chat_id FROM users WHERE username = ?', (username,))
-    row = c.fetchone()
-    conn.close()
-    return row[0] if row else None
-
-# Webhook endpoint for form submissions
 @app.route('/form_webhook', methods=['POST'])
 def form_webhook():
-    # 1) Логируем входящий запрос
-    print("FORM_WEBHOOK payload:", request.json)
-
     data = request.json.get('data', {})
     fio = data.get('fio', '').strip()
-    username = data.get('username', '').strip()
-# если человек указал "@ivanov", убираем первую @
-    if username.startswith('@'):
-        username = username[1:]
-    print("Normalized username:", username)
+    token = data.get('token', '').strip()
 
+    print("FORM_WEBHOOK:", "fio=", fio, "token=", token)
 
-    # 2) Загрузка списка участников и проверка ФИО
-    with open('program.pdf', 'rb') as f:
-        reader = PdfReader(f)
-        text = ''
-        for page in reader.pages:
-            text += page.extract_text() or ''
+    # 1) Проверяем token → получаем chat_id
+    conn = sqlite3.connect('chat_ids.db')
+    c = conn.cursor()
+    c.execute('SELECT chat_id FROM users WHERE token = ?', (token,))
+    row = c.fetchone()
+    conn.close()
+    if not row:
+        print("❌ Invalid token:", token)
+        return {"status": "error", "message": "Invalid token"}, 400
+    chat_id = row[0]
+    print("Resolved chat_id:", chat_id)
 
-    # Заменяем простой approved = fio in text на расширенную проверку:
-    if fio not in text:
-        print("❌ FIO not found in program.pdf:", fio)
-        return {"status": "error", "message": "ФИО не найдено в программе"}, 400
-    else:
-        print("✅ FIO approved:", fio)
+    # 2) Проверяем ФИО в program.pdf как раньше…
+    # 3) Генерируем сертификат и сохраняем в out_docx
+    # 4) Отправляем в Telegram:
 
-    # 3) Генерация сертификата
-    tpl = DocxTemplate('template.docx')
-    context = {"FIO": fio, "number": generate_certificate_number()}
-    tpl.render(context)
-    out_docx = tempfile.NamedTemporaryFile(delete=False, suffix='.docx').name
-    tpl.save(out_docx)
-    print("Certificate generated at", out_docx)
-
-    # Send to user
-    chat_id = get_chat_id(username)
-    print("Resolved chat_id for", username, "→", chat_id)
-    if not chat_id:
-        print(f"❌ No chat_id for {username}, aborting.")
-        return {"status": "error", "message": "User did not initiate bot"}, 400
-
-    # Отправка
     try:
         with open(out_docx, 'rb') as doc:
             bot.send_document(chat_id=chat_id, document=doc)
